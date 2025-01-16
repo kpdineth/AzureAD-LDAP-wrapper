@@ -5,8 +5,11 @@ const helper = require('./helper');
 const encode = require('hashcode').hashCode;
 const customizer = require('./customizer');
 const fetch = require('./graph.fetch');
+const UserInfoManager = require('./userInfoManager');
 
+//Dineth: Added UserInfoManager for persistent UID tracking
 const database = {};
+const userInfoManager = new UserInfoManager();
 
 /**
  * contains the in-memory database for the LDAP server
@@ -531,6 +534,10 @@ async function mergeAzureUserEntries(db) {
         helper.log("database.js", 'users.json' + " saved.");
     }
 
+    //Dineth: Load existing user mappings from userInfo.json
+    userInfoManager.load();
+    let userMap = userInfoManager.getUserMap();
+
     for (let i = 0, len = users.length; i < len; i++) {
         let user = users[i];
         let userPrincipalName = user.userPrincipalName;
@@ -621,7 +628,8 @@ async function mergeAzureUserEntries(db) {
 
             renameEntryByUUID(db, user.id, upName);
 
-            let user_hash = (db[upName] && db[upName].hasOwnProperty('uidNumber')) ? (db[upName].uidNumber.toString()) : Math.abs(encode().value(user.id)).toString();
+            //Dineth: Get or create UID using UserInfoManager, starting from 30000
+            let user_hash = userInfoManager.getUidOrCreate(userPrincipalName);
 
             let sambaNTPassword = (
                 db[upName] &&
@@ -641,6 +649,20 @@ async function mergeAzureUserEntries(db) {
 
             // add default `users`-group
             db['tmp_user_to_groups'][user.id].push(config.LDAP_USERSGROUPSBASEDN);
+
+            //Dineth: Only process users that belong to groups specified in LDAP_USERS_SYNCONLYINGROUP
+            if (sync_only_groups && sync_only_groups.length > 0) {
+                const userGroups = db['tmp_user_to_groups'][user.id]
+                    .filter(g => g !== config.LDAP_USERSGROUPSBASEDN)
+                    .map(g => db[g]?.cn?.toLowerCase())
+                    .filter(Boolean);
+                
+                const isInSpecifiedGroups = userGroups.some(group => sync_only_groups.includes(group));
+                if (!isInSpecifiedGroups) {
+                    helper.log("database.js", `Skipping user ${userPrincipalName} - not in specified groups`);
+                    continue;
+                }
+            }
 
             for (let j = 0, jlen = db['tmp_user_to_groups'][user.id].length; j < jlen; j++) {
                 let g = db['tmp_user_to_groups'][user.id][j];
@@ -754,6 +776,9 @@ async function mergeAzureUserEntries(db) {
     }
 
     delete db['tmp_user_to_groups'];
+
+    // Save updated user mappings
+    userInfoManager.save();
 }
 
 /**
@@ -776,6 +801,7 @@ async function mergeAzureEntries(db) {
  */
 database.init = async function (callback) {
     helper.log("database.js", "init database");
+    userInfoManager.cleanup();
 
     await refreshDBentries();
 
