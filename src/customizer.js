@@ -16,9 +16,19 @@ if (fs.existsSync('./customizer/ldap_customizer.js')) {
     helper.log("customizer.js", "DSM7 customizer loaded");
 }
 
-// keep only users within these groups from Azure
+//Dineth: Filter users based on groups specified in LDAP_USERS_SYNCONLYINGROUP
+//Dineth: Format: "group1|group2|group3" in .env file
+//Dineth: Only users from these groups will be:
+//Dineth: 1. Processed in the LDAP directory
+//Dineth: 2. Assigned UIDs starting from 30000
+//Dineth: 3. Added to userInfo.json for persistence
 const sync_only_groups = config.LDAP_USERS_SYNCONLYINGROUP?.split("|").map(e => e.trim().toLowerCase()) || null;
 const default_group = config.LDAP_USERS_SETDEFAULTGROUP?.split("|").map(e => e.trim().toLowerCase()) || null;
+
+module.exports = {
+    ...module.exports,
+    sync_only_groups
+};
 
 // ** modify the api endpoints, like e.g. switch from v1.0 to beta ** //
 customizer.modifyGraphApiConfig = function (apiConfig, MS_GRAPH_SCOPE) {

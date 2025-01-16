@@ -7,7 +7,8 @@ const customizer = require('./customizer');
 const fetch = require('./graph.fetch');
 const UserInfoManager = require('./userInfoManager');
 
-//Dineth: Added UserInfoManager for persistent UID tracking
+//Dineth: Added UserInfoManager for persistent UID tracking and import sync_only_groups
+const { sync_only_groups } = require('./customizer');
 const database = {};
 const userInfoManager = new UserInfoManager();
 
@@ -534,7 +535,9 @@ async function mergeAzureUserEntries(db) {
         helper.log("database.js", 'users.json' + " saved.");
     }
 
-    //Dineth: Load existing user mappings from userInfo.json
+    //Dineth: Load existing user mappings from userInfo.json to preserve UIDs
+    //Dineth: This ensures users keep their assigned UIDs across restarts
+    //Dineth: New users will get UIDs starting from 30000
     userInfoManager.load();
     let userMap = userInfoManager.getUserMap();
 
@@ -543,11 +546,11 @@ async function mergeAzureUserEntries(db) {
         let userPrincipalName = user.userPrincipalName;
         let AzureADuserExternal = 0;
 
-        let isGuestOrExternalUser = (user.userType == "Guest") || user.identities.filter(x => x.hasOwnProperty('issuer') && x.issuer == 'ExternalAzureAD').length > 0;
-        let isExternalUserStateAccepted = (user.externalUserState == "Accepted");
-        let isMicrosoftAccount = (isGuestOrExternalUser && user.hasOwnProperty('identities') &&
-            user.identities.filter(x => x.hasOwnProperty('issuer') && x.issuer == 'ExternalAzureAD')
-                .length == 0);
+        //Dineth: Add null checks for user.identities
+        const hasExternalIdentity = user.identities?.some(x => x.hasOwnProperty('issuer') && x.issuer === 'ExternalAzureAD') ?? false;
+        let isGuestOrExternalUser = (user.userType === "Guest") || hasExternalIdentity;
+        let isExternalUserStateAccepted = (user.externalUserState === "Accepted");
+        let isMicrosoftAccount = (isGuestOrExternalUser && user.hasOwnProperty('identities') && !hasExternalIdentity);
 
         // guest has not joined (yet) - so we cannot know if the user has a login for MicrosoftAccount or ExternalAzureAD 
         if (isGuestOrExternalUser && !isExternalUserStateAccepted) {
@@ -650,18 +653,32 @@ async function mergeAzureUserEntries(db) {
             // add default `users`-group
             db['tmp_user_to_groups'][user.id].push(config.LDAP_USERSGROUPSBASEDN);
 
-            //Dineth: Only process users that belong to groups specified in LDAP_USERS_SYNCONLYINGROUP
-            if (sync_only_groups && sync_only_groups.length > 0) {
+            //Dineth: Check group membership before processing user
+            if (sync_only_groups?.length > 0) {
                 const userGroups = db['tmp_user_to_groups'][user.id]
-                    .filter(g => g !== config.LDAP_USERSGROUPSBASEDN)
-                    .map(g => db[g]?.cn?.toLowerCase())
-                    .filter(Boolean);
-                
-                const isInSpecifiedGroups = userGroups.some(group => sync_only_groups.includes(group));
+                    .filter(g => g !== config.LDAP_USERSGROUPSBASEDN && db[g])
+                    .map(g => {
+                        const group = db[g];
+                        // Check both displayName and cn, normalize to lowercase
+                        const groupNames = [
+                            group.displayName?.toLowerCase(),
+                            group.cn?.toLowerCase()
+                        ].filter(Boolean);
+                        return groupNames;
+                    })
+                    .flat();
+
+                const isInSpecifiedGroups = userGroups.some(groupName => 
+                    sync_only_groups.includes(groupName)
+                );
+
                 if (!isInSpecifiedGroups) {
                     helper.log("database.js", `Skipping user ${userPrincipalName} - not in specified groups`);
+                    delete db['tmp_user_to_groups'][user.id];
                     continue;
                 }
+
+                helper.log("database.js", `Processing user ${userPrincipalName} - found in groups: ${userGroups.join(', ')}`);
             }
 
             for (let j = 0, jlen = db['tmp_user_to_groups'][user.id].length; j < jlen; j++) {
@@ -805,19 +822,31 @@ database.init = async function (callback) {
 
     await refreshDBentries();
 
-    callback();
+    // Dineth: Make callback optional
+    if (typeof callback === 'function') {
+        callback();
+    }
 
     const interval_func = async function () {
         helper.forceLog("database.js", "every", config.LDAP_SYNC_TIME, "minutes refreshDBentries()");
         await refreshDBentries();
-        callback();
+        // Dineth: Only call callback if it exists
+        if (typeof callback === 'function') {
+            callback();
+        }
     };
 
     helper.forceLog("database.js", "every", refreshInterval, "ms refreshDBentries()");
 
-    if (refreshInterval > 0)
+    //Dineth: Set up automatic refresh based on LDAP_SYNC_TIME from .env
+    //Dineth: This controls:
+    //Dineth: 1. How often user data is synced from Azure AD
+    //Dineth: 2. When userInfo.json is updated with new UIDs
+    //Dineth: 3. When group membership is re-evaluated
+    if (refreshInterval > 0) {
         return setInterval(interval_func, refreshInterval);
-    else return null;
+    }
+    return null;
 };
 
 /**

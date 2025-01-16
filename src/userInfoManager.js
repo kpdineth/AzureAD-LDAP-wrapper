@@ -4,7 +4,13 @@ const helper = require('./helper');
 const config = require('./config');
 
 /**
- * Manages the userInfo.json file which maintains username to UID mappings
+ * //Dineth: Manages persistent UID assignments for LDAP users with the following features:
+ * //Dineth: - Maintains userInfo.json in .cache directory for persistent storage
+ * //Dineth: - Starts assigning UIDs from 30000 for new users
+ * //Dineth: - Preserves existing UID mappings across restarts
+ * //Dineth: - Only processes users from groups specified in LDAP_USERS_SYNCONLYINGROUP
+ * //Dineth: - Automatically saves changes after each sync cycle
+ * //Dineth: - Respects sync frequency defined in LDAP_SYNC_TIME
  * @class UserInfoManager
  */
 class UserInfoManager {
