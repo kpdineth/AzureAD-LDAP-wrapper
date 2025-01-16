@@ -2,7 +2,7 @@
 
 LDAP-wrapper is a Node.js LDAP server built on top of ([ldapjs](https://github.com/ldapjs/node-ldapjs)) that allows users and groups from `Microsoft Entra ID` (formerly `Azure Active Directory`) to be accessed through the LDAP protocol. User authentication is performed using Microsoft Graph API on every login attempt. This allows your other applications to connect to the LDAP server and thus allows your end users to authenticate with a work or school account.
 
-This it a possible workaround for older applications that lack Microsoft Entra ID support or for scenarios where managing a local AD controller is undesirable.
+This is a possible workaround for older applications that lack Microsoft Entra ID support or for scenarios where managing a local AD controller is undesirable.
 
 ## Table of Contents
 
