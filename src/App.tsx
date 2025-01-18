@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import * as React from 'react';
 import { Button } from "./components/ui/button"
 import { Input } from "./components/ui/input"
 import { Textarea } from "./components/ui/textarea"
 import { Card } from "./components/ui/card"
 import { Alert, AlertDescription } from "./components/ui/alert"
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://user:1af398ff821e1117fae1faf845cd9835@local-ai-app-tunnel-w4pvbsu9.devinapps.com';
+interface ApiResponse {
+  status: string;
+  data?: any;
+  error?: string;
+}
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_KEY = process.env.REACT_APP_API_KEY;
 const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB
 
 function App() {
@@ -33,6 +40,7 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/api/documents`, {
         method: 'POST',
+        headers: API_KEY ? { 'Authorization': `Bearer ${API_KEY}` } : {},
         body: formData,
       });
       const data = await response.json();
@@ -53,7 +61,10 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/api/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(API_KEY ? { 'Authorization': `Bearer ${API_KEY}` } : {})
+        },
         body: JSON.stringify({ code }),
       });
       const data = await response.json();
@@ -74,7 +85,10 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/api/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(API_KEY ? { 'Authorization': `Bearer ${API_KEY}` } : {})
+        },
         body: JSON.stringify({ description }),
       });
       const data = await response.json();
@@ -95,7 +109,10 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/api/train`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(API_KEY ? { 'Authorization': `Bearer ${API_KEY}` } : {})
+        },
         body: JSON.stringify({ directory }),
       });
       const data = await response.json();
