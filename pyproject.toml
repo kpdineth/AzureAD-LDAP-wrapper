@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "pronto-rag-assistant"
+version = "0.1.0"
+description = "A RAG-based assistant for Pronto 4GL code analysis and editing"
+authors = ["Devin AI"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "^0.115.6"
+uvicorn = "^0.27.1"
+chromadb = "^0.6.3"
+sentence-transformers = "^3.3.1"
+pydantic = "^2.10.5"
+python-multipart = "^0.0.20"
+pytest = "^8.3.4"
+click = "^8.1.7"
+requests = "^2.31.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+pronto-ai = "src.cli.main:main"
